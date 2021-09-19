@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, session
 from vsearch3 import search4letters
 from checker import check_logged_in
 from DBcm import UseDatabase
@@ -10,7 +10,7 @@ app.config['dbconfig'] = {'host': '127.0.0.1',
                           'database': 'vsearchlogDB', }
 
 
-def log_request(req: 'flask_request', res: str) -> None:
+def log_request(req, res):
     with UseDatabase(app.config['dbconfig']) as cursor:
         _SQL = """insert into log
             (phrase, letters, ip, browser_string, results)
@@ -24,25 +24,40 @@ def log_request(req: 'flask_request', res: str) -> None:
 
 
 @app.route('/search4', methods=['POST'])
-def do_search() -> 'html':
+def do_search():
     phrase = request.form['phrase']
     letters = request.form['letters']
     title = 'Here are your results: '
     results = str(search4letters(phrase, letters))
-    log_request(request, results)
+    try:
+        log_request(request, results)
+    except Exception as err:
+        print('Error happened: ', str(err))
     return render_template('results.html', the_phrase=phrase, the_letters=letters, the_title=title,
                            the_results=results, )
 
 
 @app.route('/')
 @app.route('/entry')
-def entry_page() -> 'html':
+def entry_page():
     return render_template('entry.html', the_title='Welcome to search4letters on the web!')
 
 
+@app.route('/login')
+def do_login():
+    session['logged_in'] = True
+    return 'You are logged in.'
+
+
+@app.route('/logout')
+def do_logout():
+    session.pop('logged_in')
+    return 'You are now logged out.'
+
 
 @app.route('/viewlog')
-def view_the_log() -> 'html':
+@check_logged_in
+def view_the_log():
     with UseDatabase(app.config['dbconfig']) as cursor:
         _SQL = """select phrase, letters, ip, browser_string, results
                 from log"""
@@ -54,6 +69,8 @@ def view_the_log() -> 'html':
                            the_row_titles=titles,
                            the_data=contents, )
 
+
+app.secret_key = 'LondonIsTheCapitalOfGreatBritain'
 
 if __name__ == '__main__':
     app.run(debug=True)
